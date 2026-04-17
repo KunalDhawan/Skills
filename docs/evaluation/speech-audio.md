@@ -590,3 +590,104 @@ pass@1          | 128        | 12000       | 98.87%       | 1.13%  | 1.55%  | 0.
 ```
 
 Per-domain breakdowns are included automatically based on the `domain_label` field.
+
+## MathSpeech
+
+MathSpeech evaluates a model's ability to convert spoken mathematical expressions from real
+lecture recordings into both plain English transcriptions and LaTeX formulas. It is a
+benchmark group with two sub-benchmarks sharing the same 1,101 audio clips (MIT OpenCourseWare
+lectures, 10 speakers; AAAI 2025).
+
+**Dataset:** [AAAI2025/MathSpeech](https://huggingface.co/datasets/AAAI2025/MathSpeech)
+(1,101 samples, ~107 MB; paper evaluates the full set)
+
+**Paper:** [MathSpeech: Leveraging Small LMs for Accurate Conversion in Mathematical Speech-to-Formula](https://arxiv.org/abs/2412.15655)
+
+**Evaluation Modes:**
+
+- `mathspeech.asr`: Speech → spoken English transcription (WER with HF-leaderboard normalization).
+- `mathspeech.latex`: Speech → LaTeX formula. Following the paper, **all whitespace is removed
+  from both reference and hypothesis before scoring** (`$A B$` and `$AB$` are treated as equal).
+
+**Metrics:**
+
+- `mathspeech.asr`: **WER** (corpus-level Word Error Rate).
+- `mathspeech.latex`: **CER** (corpus-level Character Error Rate), **BLEU**, **ROUGE-1 F1**,
+  **ROUGE-L F1** (averaged per-sample, character-level on space-free strings).
+
+### Dataset Location
+
+* Benchmark is defined in `nemo_skills/dataset/mathspeech/__init__.py`
+* Original dataset is hosted on [HuggingFace](https://huggingface.co/datasets/AAAI2025/MathSpeech)
+
+### Preparing MathSpeech Data
+
+Audio and metadata download automatically from HuggingFace (~107 MB, a few minutes):
+
+```bash
+ns prepare_data mathspeech
+```
+
+To use pre-downloaded data or download to a specific directory:
+
+```bash
+ns prepare_data mathspeech --data_dir=/path/to/mathspeech-data
+```
+
+For container mounts, override the JSONL audio prefix:
+
+```bash
+ns prepare_data mathspeech --data_dir=/path/to/mathspeech-data --audio-prefix /data/mathspeech
+```
+
+### Running MathSpeech Evaluation
+
+Evaluate both modes:
+
+```bash
+ns eval \
+    --cluster=local \
+    --benchmarks=mathspeech \
+    --server_type=openai \
+    --server_address=http://localhost:8000/v1 \
+    --model=Qwen/Qwen3-Omni-7B \
+    --output_dir=/workspace/mathspeech-eval \
+    --data_dir=/path/to/mathspeech-data
+```
+
+Evaluate a single mode:
+
+```bash
+ns eval --benchmarks=mathspeech.latex ...
+```
+
+### Understanding MathSpeech Results
+
+```
+<output_dir>/
+└── eval-results/
+    └── mathspeech/
+        ├── metrics.json                # Group-level aggregate
+        ├── mathspeech.asr/
+        │   └── metrics.json
+        └── mathspeech.latex/
+            └── metrics.json
+```
+
+Example output:
+
+```
+------------------------- mathspeech.asr --------------------------
+evaluation_mode | avg_tokens | gen_seconds | success_rate | wer    | num_entries
+pass@1          | 22         | 600         | 65.21%       | 29.50% | 1101
+
+------------------------ mathspeech.latex -------------------------
+evaluation_mode | avg_tokens | gen_seconds | success_rate | cer    | bleu   | rouge1 | rougeL | num_entries
+pass@1          | 30         | 700         | 18.40%       | 30.90% | 68.90% | 85.20% | 84.70% | 1101
+```
+
+!!! note "Scoring protocol"
+
+    The paper notes that `$A B$` and `$AB$` compile to the same output, so **all whitespace is
+    stripped from both reference and prediction before scoring LaTeX**. CER, BLEU, and ROUGE are
+    then computed character-by-character on the space-free strings.
